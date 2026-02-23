@@ -3,26 +3,32 @@
 	<head>
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<title>Visage | Command Center</title>
+		<title>Visage | macOS Environment</title>
 		<link rel="stylesheet" href="style.css" />
 	</head>
 	<body>
+		<header>
+			<h1>Visage</h1>
+			<p class="subtitle">Clustering & Extraction Engine</p>
+		</header>
+
 		<div class="scanner-panel">
 			<input
 				type="text"
 				id="scan-path"
-				placeholder="Paste absolute path here (e.g. D:\Photos\Archive)"
+				placeholder="Enter target directory path..."
+				autocomplete="off"
 			/>
 			<button id="scan-btn" class="btn" onclick="triggerScan()">
-				INITIATE SCAN
+				Initiate Scan
 			</button>
 		</div>
 
 		<div class="tabs">
 			<button class="tab active" onclick="switchTab('clusters')">
-				MATCHED CLUSTERS
+				Matched Clusters
 			</button>
-			<button class="tab" onclick="switchTab('raw')">RAW DATABASE</button>
+			<button class="tab" onclick="switchTab('raw')">Raw Database</button>
 		</div>
 
 		<div id="clusters-view" class="view active"></div>
@@ -32,8 +38,16 @@
 		</div>
 
 		<script>
-			// INIT
 			loadData();
+
+			document
+				.getElementById("scan-path")
+				.addEventListener("keypress", function (e) {
+					if (e.key === "Enter") {
+						e.preventDefault();
+						triggerScan();
+					}
+				});
 
 			function switchTab(tab) {
 				document
@@ -42,17 +56,11 @@
 				document
 					.querySelectorAll(".view")
 					.forEach((v) => v.classList.remove("active"));
-
 				event.target.classList.add("active");
 				document.getElementById(tab + "-view").classList.add("active");
 			}
 
-			function getImgSrc(cachePath) {
-				return `/cache/${cachePath.split(/[\\/]/).pop()}`;
-			}
-
 			function loadData() {
-				// Load Raw Data
 				fetch("/api/data")
 					.then((r) => r.json())
 					.then((res) => {
@@ -63,7 +71,6 @@
 						});
 					});
 
-				// Load Clusters
 				fetch("/api/groups")
 					.then((r) => r.json())
 					.then((res) => {
@@ -71,13 +78,16 @@
 						view.innerHTML = "";
 						if (res.data.length === 0) {
 							view.innerHTML =
-								"<p>No matches found yet. Scan more folders.</p>";
+								'<p style="color: var(--text-secondary); text-align: center; margin-top: 3rem;">No matches detected in the current index.</p>';
 							return;
 						}
 
 						res.data.forEach((group, index) => {
 							let html = `<div class="cluster-row">
-                                  <div class="cluster-header">TARGET ${index + 1} (Found in ${group.length} folders)</div>
+                                  <div class="cluster-header">
+                                      <span>Target ${index + 1}</span>
+                                      <span class="cluster-badge">${group.length} Locations</span>
+                                  </div>
                                   <div class="cluster-grid">`;
 							group.forEach((node) => {
 								html += createCard(node.path, node.thumbnail);
@@ -90,11 +100,12 @@
 
 			function createCard(path, thumbnailPath) {
 				const cleanPath = path.replace(/\\/g, "\\\\");
+				const imgSrc = `/cache/${thumbnailPath.split(/[\\/]/).pop()}`;
 				return `
                 <div class="card">
-                    <img src="${getImgSrc(thumbnailPath)}" class="thumbnail">
+                    <img src="${imgSrc}" class="thumbnail">
                     <div class="path-text">${path.split("\\").pop()}</div>
-                    <button class="btn" onclick="openFolder('${cleanPath}')" style="width:100%; font-size: 0.8rem;">OPEN</button>
+                    <button class="btn" onclick="openFolder('${cleanPath}')">Open Folder</button>
                 </div>
             `;
 			}
@@ -110,11 +121,13 @@
 			function triggerScan() {
 				const pathInput = document.getElementById("scan-path").value;
 				const btn = document.getElementById("scan-btn");
+				const panel = document.querySelector(".scanner-panel");
 
-				if (!pathInput) return alert("Enter a path first.");
+				if (!pathInput) return;
 
 				btn.disabled = true;
-				btn.innerText = "SCANNING... CHECK TERMINAL";
+				btn.innerText = "Extracting...";
+				panel.classList.add("scanning-active");
 
 				fetch("/api/scan", {
 					method: "POST",
@@ -124,18 +137,15 @@
 					.then((res) => res.json())
 					.then((res) => {
 						btn.disabled = false;
-						btn.innerText = "INITIATE SCAN";
-						if (res.status === "success") {
-							alert("Scan complete! Data updated.");
-							loadData(); // Reload UI
-						} else {
-							alert("Error: " + res.message);
-						}
+						btn.innerText = "Initiate Scan";
+						panel.classList.remove("scanning-active");
+						if (res.status === "success") loadData();
+						else alert("Extraction failed: " + res.message);
 					})
 					.catch(() => {
 						btn.disabled = false;
-						btn.innerText = "INITIATE SCAN";
-						alert("Server disconnected or crashed.");
+						btn.innerText = "Initiate Scan";
+						panel.classList.remove("scanning-active");
 					});
 			}
 		</script>
