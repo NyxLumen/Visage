@@ -49,11 +49,27 @@ def get_face_from_image(image_path, folder_id):
         return None, None
 
 def scan_directory(root_path):
-    print(f">>> Visage (DeepFace Engine) scanning: {root_path}")
+    print(f">>> Visage (DeepFace) scanning: {root_path}")
+    
     visage_data = {}
+    
+    # THE UPGRADE: Load existing data if it's there
+    if os.path.exists(REPORT_FILE):
+        try:
+            with open(REPORT_FILE, 'r') as f:
+                visage_data = json.load(f)
+            print(f">>> Loaded {len(visage_data)} existing folder records. Appending new data...")
+        except Exception as e:
+            print(f">>> Warning: Couldn't read existing report. Starting fresh. ({e})")
+
+    new_finds = 0
     
     for dirpath, dirnames, filenames in os.walk(root_path):
         if any(part.startswith('.') for part in Path(dirpath).parts):
+            continue
+            
+        # Skip if we already mapped this exact folder
+        if dirpath in visage_data:
             continue
             
         images = [f for f in filenames if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
@@ -69,11 +85,13 @@ def scan_directory(root_path):
             if cache_path:
                 visage_data[dirpath] = {"thumbnail": cache_path, "encoding": encoding}
                 print(f"  -> Face Locked!")
+                new_finds += 1
                 break
                 
+    # Save the merged blueprint
     with open(REPORT_FILE, 'w') as f:
         json.dump(visage_data, f, indent=4)
-    print(">>> Scan complete.")
+    print(f">>> Scan complete. Added {new_finds} new folders. Total database size: {len(visage_data)}")
 
 if __name__ == "__main__":
     target = input("Enter path: ").strip('"\'')
