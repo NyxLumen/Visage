@@ -18,8 +18,12 @@ def get_face_from_image(image_path, folder_id):
         
         if img is None: return None, 0
 
-        # UPGRADE: Switching to ArcFace for much stricter identity mapping
-        results = DeepFace.represent(img, model_name="ArcFace", enforce_detection=True)
+        results = DeepFace.represent(
+            img, 
+            model_name="ArcFace", 
+            detector_backend="retinaface", 
+            enforce_detection=True
+        )
         
         if not results: return None, 0
 

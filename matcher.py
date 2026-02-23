@@ -1,7 +1,7 @@
 import json
 import numpy as np
 
-TOLERANCE = 0.60 
+TOLERANCE = 0.45 
 
 def cosine_distance(vec1, vec2):
     """Calculates how far apart two face vectors are."""

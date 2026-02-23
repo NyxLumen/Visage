@@ -1,5 +1,6 @@
 import os
 import json
+import subprocess
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 
@@ -33,7 +34,10 @@ def get_groups():
 def open_folder():
     path = request.json.get('path')
     if path and os.path.exists(path):
-        os.startfile(path)
+        # Force Windows to open the explorer process directly
+        # os.path.normpath fixes any weird slash directions
+        clean_path = os.path.normpath(path)
+        subprocess.Popen(['explorer', clean_path])
         return jsonify({"status": "success"})
     return jsonify({"status": "error", "message": "Invalid path"}), 400
 
