@@ -117,7 +117,6 @@
 					body: JSON.stringify({ path: path }),
 				});
 			}
-
 			function triggerScan() {
 				const pathInput = document.getElementById("scan-path").value;
 				const btn = document.getElementById("scan-btn");
@@ -125,8 +124,9 @@
 
 				if (!pathInput) return;
 
+				// Restoring the animated loader span
 				btn.disabled = true;
-				btn.innerText = "Extracting...";
+				btn.innerHTML = "<span class='loader-text'>Extracting</span>";
 				panel.classList.add("scanning-active");
 
 				fetch("/api/scan", {
@@ -137,14 +137,14 @@
 					.then((res) => res.json())
 					.then((res) => {
 						btn.disabled = false;
-						btn.innerText = "Initiate Scan";
+						btn.innerHTML = "Initiate Scan"; // Reset to standard text
 						panel.classList.remove("scanning-active");
 						if (res.status === "success") loadData();
 						else alert("Extraction failed: " + res.message);
 					})
 					.catch(() => {
 						btn.disabled = false;
-						btn.innerText = "Initiate Scan";
+						btn.innerHTML = "Initiate Scan";
 						panel.classList.remove("scanning-active");
 					});
 			}

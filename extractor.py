@@ -1,4 +1,5 @@
 import os
+import sys
 import cv2
 import json
 import numpy as np
@@ -83,6 +84,10 @@ def scan_directory(root_path):
         for file in images:
             if images_checked >= MAX_SAMPLE: break
             
+            # THE TERMINAL ANIMATION
+            sys.stdout.write(f"\r  -> Analyzing sample {images_checked + 1}/{MAX_SAMPLE}: {file[:30]}... ")
+            sys.stdout.flush()
+            
             img_path = os.path.join(dirpath, file)
             # Unpack the 3 variables now
             cache_path, encoding, score = get_face_from_image(img_path, safe_id)
@@ -93,6 +98,18 @@ def scan_directory(root_path):
                 best_encoding = encoding
                 
             images_checked += 1
+            
+        # Clear the animated line when done
+        sys.stdout.write("\r" + " " * 80 + "\r")
+        sys.stdout.flush()
+            
+        # Only log the folder if we actually locked onto a solid face
+        if best_cache and highest_score > 5000:
+            visage_data[dirpath] = {"thumbnail": best_cache, "encoding": best_encoding}
+            print(f"  -> [LOCKED] Alpha Face (Footprint: {highest_score}px)")
+            new_finds += 1
+        else:
+            print("  -> [SKIP] No viable subject found in sample.")
             
         # Only log the folder if we actually locked onto a solid face
         if best_cache and highest_score > 5000: # 5000px ensures it's not a tiny background blur
