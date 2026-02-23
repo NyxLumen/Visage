@@ -1,9 +1,7 @@
 import json
 import numpy as np
 
-# DeepFace VGG-Face Cosine threshold (lower = stricter match)
-# 0.40 is a very safe, strict baseline.
-TOLERANCE = 0.40 
+TOLERANCE = 0.60 
 
 def cosine_distance(vec1, vec2):
     """Calculates how far apart two face vectors are."""

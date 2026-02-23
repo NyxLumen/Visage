@@ -10,67 +10,62 @@ CACHE_DIR.mkdir(exist_ok=True)
 REPORT_FILE = "report.json"
 
 def get_face_from_image(image_path, folder_id):
-    """Uses DeepFace to extract faces, bypassing brittle dlib checks."""
+    """DeepFace extraction: Returns the face data AND its pixel area score."""
     try:
-        # DeepFace.represent returns a list of detections
-        # It handles the image reading internally, but we use raw bytes for emoji safety
         img_array = np.fromfile(image_path, np.uint8)
         img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
         
-        if img is None:
-            return None, None
+        if img is None: return None, 0
 
-        # Extracting face and encoding in one go
-        # enforce_detection=True makes it skip images without faces
-        objs = DeepFace.represent(img, model_name="VGG-Face", enforce_detection=True)
+        # UPGRADE: Switching to ArcFace for much stricter identity mapping
+        results = DeepFace.represent(img, model_name="ArcFace", enforce_detection=True)
         
-        if not objs:
-            return None, None
+        if not results: return None, 0
 
-        # Grab the first face found
-        face_data = objs[0]
-        encoding = face_data["embedding"]
-        area = face_data["facial_area"] # x, y, w, h
+        # Find the LARGEST face in this specific image
+        best_local_face = None
+        max_area = 0
         
-        # Crop for thumbnail
+        for face_data in results:
+            area = face_data["facial_area"]
+            # Calculate the pixel footprint of the face
+            face_size = area['w'] * area['h'] 
+            
+            if face_size > max_area:
+                max_area = face_size
+                best_local_face = face_data
+
+        encoding = best_local_face["embedding"]
+        area = best_local_face["facial_area"]
+        
+        # Crop and save thumbnail
         face_crop = img[area['y']:area['y']+area['h'], area['x']:area['x']+area['w']]
-        
-        # Emoji-safe write
         cache_path = CACHE_DIR / f"{folder_id}.jpg"
+        
         is_success, buffer = cv2.imencode(".jpg", face_crop)
         if is_success:
-            with open(cache_path, "wb") as f:
-                f.write(buffer)
+            with open(cache_path, "wb") as f: f.write(buffer)
 
-        return str(cache_path), encoding
+        return str(cache_path), encoding, max_area
         
     except Exception:
-        # DeepFace throws an error if no face is found; we just catch and skip
-        return None, None
+        return None, 0, 0
 
 def scan_directory(root_path):
-    print(f">>> Visage (DeepFace) scanning: {root_path}")
-    
+    print(f">>> Visage (ArcFace Engine) scanning: {root_path}")
     visage_data = {}
     
-    # THE UPGRADE: Load existing data if it's there
     if os.path.exists(REPORT_FILE):
         try:
-            with open(REPORT_FILE, 'r') as f:
-                visage_data = json.load(f)
-            print(f">>> Loaded {len(visage_data)} existing folder records. Appending new data...")
-        except Exception as e:
-            print(f">>> Warning: Couldn't read existing report. Starting fresh. ({e})")
+            with open(REPORT_FILE, 'r') as f: visage_data = json.load(f)
+            print(f">>> Loaded {len(visage_data)} existing records. Appending...")
+        except: pass
 
     new_finds = 0
     
     for dirpath, dirnames, filenames in os.walk(root_path):
-        if any(part.startswith('.') for part in Path(dirpath).parts):
-            continue
-            
-        # Skip if we already mapped this exact folder
-        if dirpath in visage_data:
-            continue
+        if any(part.startswith('.') for part in Path(dirpath).parts): continue
+        if dirpath in visage_data: continue
             
         images = [f for f in filenames if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
         if not images: continue
@@ -78,20 +73,38 @@ def scan_directory(root_path):
         print(f"Scanning: {dirpath}")
         safe_id = str(Path(dirpath).relative_to(root_path)).replace(os.sep, "_") or "root"
 
+        # THE UPGRADE: Multi-Sampling
+        best_cache = None
+        best_encoding = None
+        highest_score = 0
+        images_checked = 0
+        MAX_SAMPLE = 5 # Only check the first 5 images to keep it fast
+        
         for file in images:
-            img_path = os.path.join(dirpath, file)
-            cache_path, encoding = get_face_from_image(img_path, safe_id)
+            if images_checked >= MAX_SAMPLE: break
             
-            if cache_path:
-                visage_data[dirpath] = {"thumbnail": cache_path, "encoding": encoding}
-                print(f"  -> Face Locked!")
-                new_finds += 1
-                break
+            img_path = os.path.join(dirpath, file)
+            # Unpack the 3 variables now
+            cache_path, encoding, score = get_face_from_image(img_path, safe_id)
+            
+            if cache_path and score > highest_score:
+                highest_score = score
+                best_cache = cache_path
+                best_encoding = encoding
                 
-    # Save the merged blueprint
+            images_checked += 1
+            
+        # Only log the folder if we actually locked onto a solid face
+        if best_cache and highest_score > 5000: # 5000px ensures it's not a tiny background blur
+            visage_data[dirpath] = {"thumbnail": best_cache, "encoding": best_encoding}
+            print(f"  -> Alpha Face Locked! (Score: {highest_score})")
+            new_finds += 1
+        else:
+            print("  -> No viable subject found in sample. Skipping.")
+                
     with open(REPORT_FILE, 'w') as f:
         json.dump(visage_data, f, indent=4)
-    print(f">>> Scan complete. Added {new_finds} new folders. Total database size: {len(visage_data)}")
+    print(f">>> Scan complete. Added {new_finds} new nodes.")
 
 if __name__ == "__main__":
     target = input("Enter path: ").strip('"\'')
