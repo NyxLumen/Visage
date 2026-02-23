@@ -3,42 +3,53 @@ import json
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 
+# Import your actual engines
+from extractor import scan_directory
+from matcher import build_clusters
+
 app = Flask(__name__, static_folder='.', static_url_path='')
 CORS(app)
 
-# 1. Serve the UI Dashboard
 @app.route('/')
-def index():
-    return send_from_directory('.', 'index.html')
+def index(): return send_from_directory('.', 'index.html')
 
-# 2. Serve the Thumbnail Images from .cache
 @app.route('/cache/<path:filename>')
-def serve_cache(filename):
-    return send_from_directory('.cache', filename)
+def serve_cache(filename): return send_from_directory('.cache', filename)
 
-# 3. Serve the Match Data
 @app.route('/api/data', methods=['GET'])
 def get_data():
     try:
-        # We will load the full report so you can see ALL faces, 
-        # even if they didn't have a match in groups.json yet.
-        with open('report.json', 'r') as f:
-            data = json.load(f)
-        return jsonify({"status": "success", "data": data})
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        with open('report.json', 'r') as f: return jsonify({"status": "success", "data": json.load(f)})
+    except: return jsonify({"status": "success", "data": {}})
 
-# 4. The Windows Native Folder Execution
+@app.route('/api/groups', methods=['GET'])
+def get_groups():
+    try:
+        if not os.path.exists('groups.json'): return jsonify({"status": "success", "data": []})
+        with open('groups.json', 'r') as f: return jsonify({"status": "success", "data": json.load(f)})
+    except: return jsonify({"status": "success", "data": []})
+
 @app.route('/api/open-folder', methods=['POST'])
 def open_folder():
-    data = request.json
-    folder_path = data.get('path')
-    
+    path = request.json.get('path')
+    if path and os.path.exists(path):
+        os.startfile(path)
+        return jsonify({"status": "success"})
+    return jsonify({"status": "error", "message": "Invalid path"}), 400
+
+# NEW: The Scanner API
+@app.route('/api/scan', methods=['POST'])
+def run_scan():
+    folder_path = request.json.get('path')
     if not folder_path or not os.path.exists(folder_path):
-        return jsonify({"status": "error", "message": "Invalid path"}), 400
+        return jsonify({"status": "error", "message": "Path does not exist."}), 400
         
     try:
-        os.startfile(folder_path) 
+        print(f"\n>>> UI TRIGGERED SCAN: {folder_path}")
+        # 1. Extract the faces
+        scan_directory(folder_path)
+        # 2. Immediately rebuild the clusters so the UI has fresh data
+        build_clusters()
         return jsonify({"status": "success"})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500

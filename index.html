@@ -3,157 +3,139 @@
 	<head>
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<title>Visage | Cluster Dashboard</title>
-		<style>
-			:root {
-				--bg: #0f172a;
-				--glass: rgba(255, 255, 255, 0.05);
-				--border: rgba(255, 255, 255, 0.1);
-				--accent: #38bdf8;
-				--text: #e2e8f0;
-			}
-			body {
-				min-height: 100dvh;
-				background-color: var(--bg);
-				color: var(--text);
-				font-family: "Segoe UI", system-ui, sans-serif;
-				margin: 0;
-				padding: 2rem;
-				background-image: radial-gradient(
-					circle at top right,
-					#1e293b,
-					transparent 40%
-				);
-			}
-			header {
-				margin-bottom: 3rem;
-				border-bottom: 1px solid var(--border);
-				padding-bottom: 1rem;
-			}
-			h1 {
-				margin: 0;
-				font-weight: 300;
-				letter-spacing: 2px;
-			}
-			span.accent {
-				color: var(--accent);
-				font-weight: 600;
-			}
-
-			.grid {
-				display: grid;
-				grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-				gap: 1.5rem;
-			}
-
-			/* Glassmorphism Card */
-			.card {
-				background: var(--glass);
-				backdrop-filter: blur(10px);
-				border: 1px solid var(--border);
-				border-radius: 12px;
-				padding: 1rem;
-				transition:
-					transform 0.2s,
-					border-color 0.2s;
-				display: flex;
-				flex-direction: column;
-				align-items: center;
-			}
-			.card:hover {
-				transform: translateY(-5px);
-				border-color: var(--accent);
-			}
-
-			.thumbnail {
-				width: 150px;
-				height: 150px;
-				object-fit: cover;
-				border-radius: 50%;
-				border: 2px solid var(--border);
-				margin-bottom: 1rem;
-			}
-
-			.path-text {
-				font-size: 0.8rem;
-				color: #94a3b8;
-				word-break: break-all;
-				text-align: center;
-				margin-bottom: 1rem;
-				flex-grow: 1;
-			}
-
-			.btn {
-				background: transparent;
-				color: var(--accent);
-				border: 1px solid var(--accent);
-				padding: 0.5rem 1rem;
-				border-radius: 6px;
-				cursor: pointer;
-				font-weight: 600;
-				transition: all 0.2s;
-				width: 100%;
-			}
-			.btn:hover {
-				background: var(--accent);
-				color: var(--bg);
-			}
-		</style>
+		<title>Visage | Command Center</title>
+		<link rel="stylesheet" href="style.css" />
 	</head>
 	<body>
-		<header>
-			<h1>VISAGE <span class="accent">ENGINE</span></h1>
-			<p>Extracted Data Node Sandbox</p>
-		</header>
+		<div class="scanner-panel">
+			<input
+				type="text"
+				id="scan-path"
+				placeholder="Paste absolute path here (e.g. D:\Photos\Archive)"
+			/>
+			<button id="scan-btn" class="btn" onclick="triggerScan()">
+				INITIATE SCAN
+			</button>
+		</div>
 
-		<div class="grid" id="face-grid"></div>
+		<div class="tabs">
+			<button class="tab active" onclick="switchTab('clusters')">
+				MATCHED CLUSTERS
+			</button>
+			<button class="tab" onclick="switchTab('raw')">RAW DATABASE</button>
+		</div>
+
+		<div id="clusters-view" class="view active"></div>
+
+		<div id="raw-view" class="view">
+			<div class="grid" id="raw-grid"></div>
+		</div>
 
 		<script>
-			// Fetch the raw report data from Python
-			fetch("/api/data")
-				.then((res) => res.json())
-				.then((data) => {
-					if (data.status === "success") {
-						renderGrid(data.data);
-					}
-				});
+			// INIT
+			loadData();
 
-			function renderGrid(reportData) {
-				const grid = document.getElementById("face-grid");
+			function switchTab(tab) {
+				document
+					.querySelectorAll(".tab")
+					.forEach((t) => t.classList.remove("active"));
+				document
+					.querySelectorAll(".view")
+					.forEach((v) => v.classList.remove("active"));
 
-				// Loop through the dictionary keys (the folder paths)
-				Object.keys(reportData).forEach((path) => {
-					const node = reportData[path];
-
-					// Format the thumbnail path for the browser
-					// e.g. .cache\folder.jpg -> /cache/folder.jpg
-					const imgName = node.thumbnail.split(/[\\/]/).pop();
-					const imgSrc = `/cache/${imgName}`;
-
-					// Create the glass card
-					const card = document.createElement("div");
-					card.className = "card";
-
-					card.innerHTML = `
-                    <img src="${imgSrc}" class="thumbnail" alt="Face Anchor" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\\'http://www.w3.org/2000/svg\\' width=\\'150\\' height=\\'150\\'><rect width=\\'150\\' height=\\'150\\' fill=\\'%231e293b\\'/></svg>'">
-                    <div class="path-text">${path.split("\\").pop()}</div>
-                    <button class="btn" onclick="openFolder('${path.replace(/\\/g, "\\\\")}')">INSPECT FOLDER</button>
-                `;
-
-					grid.appendChild(card);
-				});
+				event.target.classList.add("active");
+				document.getElementById(tab + "-view").classList.add("active");
 			}
 
-			// Trigger the Python backend to open the Windows File Explorer
-			function openFolder(folderPath) {
+			function getImgSrc(cachePath) {
+				return `/cache/${cachePath.split(/[\\/]/).pop()}`;
+			}
+
+			function loadData() {
+				// Load Raw Data
+				fetch("/api/data")
+					.then((r) => r.json())
+					.then((res) => {
+						const grid = document.getElementById("raw-grid");
+						grid.innerHTML = "";
+						Object.keys(res.data).forEach((path) => {
+							grid.innerHTML += createCard(path, res.data[path].thumbnail);
+						});
+					});
+
+				// Load Clusters
+				fetch("/api/groups")
+					.then((r) => r.json())
+					.then((res) => {
+						const view = document.getElementById("clusters-view");
+						view.innerHTML = "";
+						if (res.data.length === 0) {
+							view.innerHTML =
+								"<p>No matches found yet. Scan more folders.</p>";
+							return;
+						}
+
+						res.data.forEach((group, index) => {
+							let html = `<div class="cluster-row">
+                                  <div class="cluster-header">TARGET ${index + 1} (Found in ${group.length} folders)</div>
+                                  <div class="cluster-grid">`;
+							group.forEach((node) => {
+								html += createCard(node.path, node.thumbnail);
+							});
+							html += `</div></div>`;
+							view.innerHTML += html;
+						});
+					});
+			}
+
+			function createCard(path, thumbnailPath) {
+				const cleanPath = path.replace(/\\/g, "\\\\");
+				return `
+                <div class="card">
+                    <img src="${getImgSrc(thumbnailPath)}" class="thumbnail">
+                    <div class="path-text">${path.split("\\").pop()}</div>
+                    <button class="btn" onclick="openFolder('${cleanPath}')" style="width:100%; font-size: 0.8rem;">OPEN</button>
+                </div>
+            `;
+			}
+
+			function openFolder(path) {
 				fetch("/api/open-folder", {
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({ path: folderPath }),
+					body: JSON.stringify({ path: path }),
+				});
+			}
+
+			function triggerScan() {
+				const pathInput = document.getElementById("scan-path").value;
+				const btn = document.getElementById("scan-btn");
+
+				if (!pathInput) return alert("Enter a path first.");
+
+				btn.disabled = true;
+				btn.innerText = "SCANNING... CHECK TERMINAL";
+
+				fetch("/api/scan", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ path: pathInput }),
 				})
 					.then((res) => res.json())
 					.then((res) => {
-						if (res.status !== "success") alert("Failed to open directory.");
+						btn.disabled = false;
+						btn.innerText = "INITIATE SCAN";
+						if (res.status === "success") {
+							alert("Scan complete! Data updated.");
+							loadData(); // Reload UI
+						} else {
+							alert("Error: " + res.message);
+						}
+					})
+					.catch(() => {
+						btn.disabled = false;
+						btn.innerText = "INITIATE SCAN";
+						alert("Server disconnected or crashed.");
 					});
 			}
 		</script>
